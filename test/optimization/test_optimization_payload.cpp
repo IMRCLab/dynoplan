@@ -148,3 +148,164 @@ BOOST_AUTO_TEST_CASE(t_three_uav) {
 
   sol.to_yaml_format("/tmp/dynoplan_three_uav.yaml");
 }
+
+BOOST_AUTO_TEST_CASE(t_rigid) {
+
+  // Problem problem(dynobench_base
+  // "envs/quad3d_payload/empty0_2_rig_hover.yaml");
+  Problem problem(dynobench_base "envs/quad3d_payload/empty0_3_rig_move.yaml");
+
+  problem.models_base_path = dynobench_base "models/";
+  Trajectory init_guess;
+  init_guess.num_time_steps = 500;
+
+  Result_opti result;
+  Trajectory sol;
+
+  Options_trajopt options;
+  options.solver_id = 0;
+  options.weight_goal = 50;
+  options.max_iter = 200;
+  options.check_with_finite_diff = false;
+  // options.collision_weight = 1;
+  options.soft_control_bounds = true;
+
+  trajectory_optimization(problem, init_guess, options, sol, result);
+  BOOST_TEST(result.feasible);
+
+  sol.to_yaml_format("/tmp/rigid.yaml");
+}
+
+BOOST_AUTO_TEST_CASE(t_rigid_obs_bad) {
+
+  Problem problem(dynobench_base
+                  "envs/quad3d_payload/quad3d_payload_rig_one_obs/"
+                  "quad3d_payload_one_obs_0_3_rig.yaml");
+
+  problem.models_base_path = dynobench_base "models/";
+
+  Trajectory init_guess(dynobench_base
+                        "envs/quad3d_payload/trajectories/"
+                        "quad3d_payload_3_rig_one_obs_init_guess.yaml");
+  // e
+
+  // manual ensure
+
+  int num_robots = 3;
+  int nx_payload = 13;
+  for (auto &xout : init_guess.states) {
+
+    xout.segment(3, 4).normalize();
+
+    if (xout(6) < 0) {
+      xout.segment(3, 4) *= -1;
+    }
+    // xout.segment(3, 4) << 0, 0, 0, 1;
+    xout.segment(7, 6).setZero();
+
+    for (int i = 0; i < num_robots; ++i) {
+      xout.segment(nx_payload + 6 * i, 3).normalize();
+      xout.segment(nx_payload + 6 * i + 3, 3).setZero();
+
+      CHECK_LEQ(xout(nx_payload + 6 * i + 2), -.5, "");
+
+      xout.segment(nx_payload + 6 * num_robots + 7 * i, 4).normalize();
+
+      if (xout(nx_payload + 6 * num_robots + 7 * i + 3) < 0) {
+        std::cout << "flipping quaternion" << std::endl;
+        xout.segment(nx_payload + 6 * num_robots + 7 * i, 4) *= -1;
+      }
+
+      xout.segment(nx_payload + 6 * num_robots + 7 * i + 4, 3).setZero();
+    }
+  }
+
+  Result_opti result;
+  Trajectory sol;
+  Options_trajopt options;
+  options.solver_id = 0;
+  options.weight_goal = 50;
+  options.max_iter = 200;
+  options.check_with_finite_diff = false;
+  options.soft_control_bounds = true;
+  options.smooth_traj = true;
+  options.noise_level = 1e-6;
+
+  trajectory_optimization(problem, init_guess, options, sol, result);
+  BOOST_TEST(result.feasible);
+
+  sol.to_yaml_format("/tmp/rigid_obs.yaml");
+}
+
+BOOST_AUTO_TEST_CASE(t_rigid_obs_good) {
+
+  Problem problem(dynobench_base
+                  "envs/quad3d_payload/quad3d_payload_rig_one_obs/"
+                  "quad3d_payload_one_obs_0_3_rig_nice.yaml");
+
+  problem.models_base_path = dynobench_base "models/";
+
+  Trajectory init_guess(dynobench_base
+                        "envs/quad3d_payload/trajectories/"
+                        "quad3d_payload_3_rig_one_obs_init_guess_nice.yaml");
+  // e
+
+  Result_opti result;
+  Trajectory sol;
+  Options_trajopt options;
+  options.solver_id = 0;
+  options.weight_goal = 50;
+  options.max_iter = 200;
+  options.check_with_finite_diff = false;
+  options.soft_control_bounds = true;
+  options.smooth_traj = true;
+  options.noise_level = 1e-6;
+
+  trajectory_optimization(problem, init_guess, options, sol, result);
+  BOOST_TEST(result.feasible);
+
+  sol.to_yaml_format("/tmp/rigid_obs.yaml");
+}
+
+BOOST_AUTO_TEST_CASE(t_transform_init_guess) {
+
+  Problem problem(dynobench_base
+                  "envs/quad3d_payload/quad3d_payload_rig_one_obs/"
+                  "quad3d_payload_one_obs_0_3_rig.yaml");
+
+  problem.models_base_path = dynobench_base "models/";
+
+  Trajectory init_guess(dynobench_base
+                        "envs/quad3d_payload/trajectories/"
+                        "quad3d_payload_3_rig_one_obs_init_guess.yaml");
+
+  Trajectory init_guess_transformed;
+  init_guess_transformed.actions = init_guess.actions;
+  init_guess_transformed.states = init_guess.states;
+
+  int nx = init_guess.states.at(0).size();
+  for (size_t i = 0; i < init_guess.states.size(); i++) {
+    init_guess_transformed.states.at(i).segment(3, nx - 3) =
+        problem.start.segment(3, nx - 3);
+  }
+
+  init_guess_transformed.to_yaml_format(
+      dynobench_base "envs/quad3d_payload/trajectories/"
+                     "quad3d_payload_3_rig_one_obs_init_guess_nice.yaml");
+
+  // Result_opti result;
+  // Trajectory sol;
+  // Options_trajopt options;
+  // options.solver_id = 0;
+  // options.weight_goal = 50;
+  // options.max_iter = 200;
+  // options.check_with_finite_diff = false;
+  // options.soft_control_bounds = true;
+  // options.smooth_traj = false;
+  // options.noise_level = 1e-7;
+  //
+  // trajectory_optimization(problem, init_guess, options, sol, result);
+  // BOOST_TEST(result.feasible);
+  //
+  // sol.to_yaml_format("/tmp/rigid_obs.yaml");
+}

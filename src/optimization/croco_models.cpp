@@ -866,6 +866,16 @@ ActionModelDyno::ActionModelDyno(ptr<Dynamics> dynamics,
   Ju.setZero();
 }
 
+template <typename Derived>
+inline bool is_finite(const Eigen::MatrixBase<Derived> &x) {
+  return ((x - x).array() == (x - x).array()).all();
+}
+
+template <typename Derived>
+inline bool is_nan(const Eigen::MatrixBase<Derived> &x) {
+  return ((x.array() == x.array())).all();
+}
+
 void ActionModelDyno::calc(const boost::shared_ptr<ActionDataAbstract> &data,
                            const Eigen::Ref<const VectorXs> &x,
                            const Eigen::Ref<const VectorXs> &u) {
@@ -882,6 +892,9 @@ void ActionModelDyno::calc(const boost::shared_ptr<ActionDataAbstract> &data,
     auto &feat = features.at(i);
     size_t &_nr = feat->nr;
     feat->calc(d->r.segment(index, _nr), x, u);
+
+    CHECK(is_finite(d->r.segment(index, _nr)), "");
+    CHECK(is_nan(d->r.segment(index, _nr)),"");
 
     if (feat->cost_type == CostTYPE::least_squares) {
       d->cost +=
@@ -1551,18 +1564,20 @@ Acceleration_cost_acrobot::Acceleration_cost_acrobot(size_t nx, size_t nu)
 // 7
 // 7
 // TOTAL:  32
-// nx (point): 
+// nx (point):
 // 6 payload: (pos, vel)
-// 6*num_robots (qc_0, wc_0, qc_1, wc_1, ...,qc_{n-1}, wc_{n-1}), cable vector and omega
-// 7* num_robots (q, w): (q_0, w_0, ..., q_{n-1}, w_{n-1}), quat and omega 
+// 6*num_robots (qc_0, wc_0, qc_1, wc_1, ...,qc_{n-1}, wc_{n-1}), cable vector
+// and omega 7* num_robots (q, w): (q_0, w_0, ..., q_{n-1}, w_{n-1}), quat and
+// omega
 Payload_n_acceleration_cost::Payload_n_acceleration_cost(
     const std::shared_ptr<dynobench::Model_robot> &model_robot, double k_acc)
-    : Cost(model_robot->nx, model_robot->nu, model_robot->nx), k_acc(k_acc), model(model_robot) {
+    : Cost(model_robot->nx, model_robot->nu, model_robot->nx), k_acc(k_acc),
+      model(model_robot) {
 
   name = "acceleration";
   int nx = model_robot->nx;
   int nu = model_robot->nu;
-  int num_robots = int((nx - 6)/13);
+  int num_robots = int((nx - 6) / 13);
   f.resize(nx);
   f.setZero();
 
@@ -1579,19 +1594,25 @@ Payload_n_acceleration_cost::Payload_n_acceleration_cost(
   // TODO@ KHALED -> we need this generic!!
   selector.resize(nx);
   selector.setZero();
-  // lets put only the entries that are about acceleration
-  // selector for the accelerations: a_payload, wc_dot, w_dot (angular acc cable and uav) 
-  selector.segment(3, 3).setOnes();
-  for (int i = 0; i < num_robots; ++i) {
-    selector.segment(6 + 6*i + 3,3 ).setOnes();
-    selector.segment(6 + 6*num_robots + 7*i + 4, 3).setOnes();
-  }
-  
-  // selector.segment(6 + 3, 3).setOnes();
-  // selector.segment(2 * 6 + 3, 3).setOnes();
 
-  // selector.segment(3 * 6 + 4, 3).setOnes();
-  // selector.segment(3 * 6 + 7 + 4, 3).setOnes();
+  auto ptr_derived =
+      std::dynamic_pointer_cast<dynobench::Model_quad3dpayload_n>(model_robot);
+
+  if (ptr_derived->params.point_mass) {
+    // lets put only the entries that are about acceleration
+    // selector for the accelerations: a_payload, wc_dot, w_dot (angular acc
+    // cable and uav)
+    selector.segment(3, 3).setOnes();
+    for (int i = 0; i < num_robots; ++i) {
+      selector.segment(6 + 6 * i + 3, 3).setOnes();
+      selector.segment(6 + 6 * num_robots + 7 * i + 4, 3).setOnes();
+    }
+  } else {
+    std::cout << "nx " << nx << std::endl;
+    std::cout << "num_robots " << num_robots << std::endl;
+    std::cout << ptr_derived->payload_system.nacc << std::endl;
+    selector.head(ptr_derived->payload_system.nacc).setOnes();
+  }
 }
 
 void Payload_n_acceleration_cost::calc(
@@ -1606,7 +1627,7 @@ void Payload_n_acceleration_cost::calc(
   // CSTR_V(f);
   // CSTR_V(selector);
   r = k_acc * f.cwiseProduct(selector);
-  // I have to choose some entries...: DONE 
+  // I have to choose some entries...: DONE
 }
 
 void Payload_n_acceleration_cost::calcDiff(
@@ -1628,9 +1649,9 @@ void Payload_n_acceleration_cost::calcDiff(
   const double k_acc2 = k_acc * k_acc;
   Lx.head(model->nx) += k_acc2 * f.cwiseProduct(selector).transpose() * acc_x;
   Lu.head(model->nu) += k_acc2 * f.cwiseProduct(selector).transpose() * acc_u;
-  Lxx.block(0,0,model->nx, model->nx) += k_acc2 * acc_x.transpose() * acc_x;
-  Luu.block(0,0,model->nu, model->nu) += k_acc2 * acc_u.transpose() * acc_u;
-  Lxu.block(0,0,model->nx, model->nu) += k_acc2 * acc_x.transpose() * acc_u;
+  Lxx.block(0, 0, model->nx, model->nx) += k_acc2 * acc_x.transpose() * acc_x;
+  Luu.block(0, 0, model->nu, model->nu) += k_acc2 * acc_u.transpose() * acc_u;
+  Lxu.block(0, 0, model->nx, model->nu) += k_acc2 * acc_x.transpose() * acc_u;
 }
 
 void Acceleration_cost_acrobot::calc(

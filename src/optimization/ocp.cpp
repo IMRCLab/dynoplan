@@ -540,7 +540,7 @@ generate_problem(const Generate_params &gen_args,
       }
     }
 
-    if (startsWith(gen_args.name, "point")) {
+    if (startsWith(gen_args.name, "point") || startsWith(gen_args.name, "rigid") ) {
       // TODO: refactor so that the features are local to the robots!!
       if (control_mode == Control_Mode::default_mode || control_mode == Control_Mode::free_time) {
         std::cout << "adding regularization on the acceleration! " << std::endl;
@@ -2654,6 +2654,13 @@ void trajectory_optimization(const dynobench::Problem &problem,
   size_t _nu = model_robot->nu;
 
   Trajectory tmp_init_guess(init_guess), tmp_solution;
+
+
+  // run ensure on trajectory
+  // for (size_t i = 0 ; i < tmp_init_guess.states.size(); i++) {
+  //   model_robot->ensure(tmp_init_guess.states.at(i));
+  // }
+
 
   if (options_trajopt_local.welf_format) {
     std::shared_ptr<dynobench::Model_quad3d> robot_derived =

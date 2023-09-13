@@ -22,6 +22,9 @@
 
 #include "dynobench/acrobot.hpp"
 #include "dynobench/car.hpp"
+#include "dynobench/quadrotor_payload_n.hpp"
+
+
 #include "dynobench/croco_macros.hpp"
 #include "dynobench/general_utils.hpp"
 #include "dynobench/math_utils.hpp"
